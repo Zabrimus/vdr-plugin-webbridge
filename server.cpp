@@ -13,6 +13,8 @@
 #include "inetclientstream.hpp"
 #include "server.h"
 #include "log.h"
+#include "webremote.h"
+#include "ffmpeghls.h"
 
 using libsocket::inet_stream;
 
@@ -39,10 +41,119 @@ std::string_view addressAsText(std::string_view binary) {
 
 cWebBridgeServer *WebBridgeServer;
 
+/**
+ * AsyncFileStreamer copied from https://github.com/uNetworking/uWebSockets/discussions/1352
+ */
+#define AsyncFileStreamer_BLOCK_SIZE (65536)
+
+struct AsyncStreamer {
+    std::string root;
+
+    explicit AsyncStreamer() = default;
+    explicit AsyncStreamer(std::string root) : root(std::move(root)) {};
+
+    void setRoot(std::string rootP) { root = std::move(rootP); };
+
+    template<bool SSL>
+    std::pair<bool, bool>
+    sendBlock(uWS::HttpResponse<SSL> *res, FILE *f, long offset, size_t len, size_t &actuallyRead) {
+        int blockSize = AsyncFileStreamer_BLOCK_SIZE;
+        char block[AsyncFileStreamer_BLOCK_SIZE];
+
+        fseek(f, offset, SEEK_SET);
+        actuallyRead = fread(block, 1, blockSize, f);
+        actuallyRead = actuallyRead > 0 ? actuallyRead : 0; // truncate anything < 0
+
+        return res->tryEnd(std::string_view(block, actuallyRead), len);
+    }
+
+    template<bool SSL>
+    void streamFile(uWS::HttpResponse<SSL> *res, std::string_view url) {
+        // NOTE: This is very unsafe, people can inject things like ../../bla in the URL and completely bypass the root folder restriction.
+        // Make sure to harden this code if it's intended to use it in anything internet facing.
+        std::string nview = root + "/" + std::string{url.substr(1)};
+        FILE *f = fopen(nview.c_str(), "rb");
+
+        stream(res, f);
+    }
+
+    template<bool SSL>
+    void streamVideo(uWS::HttpResponse<SSL> *res, std::string_view url) {
+        // NOTE: This is very unsafe, people can inject things like ../../bla in the URL and completely bypass the root folder restriction.
+        // Make sure to harden this code if it's intended to use it in anything internet facing.
+        std::string nview = std::string(STREAM_DIR) + "/" + std::string{url.substr(8)};
+
+        // wait maximum x seconds until file exists
+        int sleepTime = 100; // ms
+        int sleepCountMax = (15 * 1000) / sleepTime;
+        std::filesystem::path desiredFile{nview};
+        while (!std::filesystem::exists(desiredFile) && --sleepCountMax > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
+        }
+
+        if (std::filesystem::exists(desiredFile)) {
+            FILE *f = fopen(nview.c_str(), "rb");
+            stream(res, f);
+        } else {
+            res->writeStatus("404 Not Found");
+            res->writeHeader("Content-Type", "text/html; charset=utf-8");
+            res->end("<b>404 Not Found</b>");
+        }
+    }
+
+    template<bool SSL>
+    void streamBuffer(uWS::HttpResponse<SSL> *res, void *buffer, size_t size) {
+        FILE *f = fmemopen(buffer, size, "rb");
+        stream(res, f);
+    }
+
+    template<bool SSL>
+    void stream(uWS::HttpResponse<SSL> *res, FILE *file) {
+        if (file == nullptr) {
+            res->writeStatus("404 Not Found");
+            res->writeHeader("Content-Type", "text/html; charset=utf-8");
+            res->end("<b>404 Not Found</b>");
+        } else {
+            res->writeStatus(uWS::HTTP_200_OK);
+            fseek(file, 0, SEEK_END);
+            long len = ftell(file);
+            fseek(file, 0, SEEK_SET);
+
+            res->onAborted([file]() {
+              fclose(file);
+            });
+
+            auto fillStream = [this, len, res, file]() {
+              bool retry;
+              bool completed;
+              do {
+                  size_t actuallyRead;
+                  auto tryEndResult = sendBlock(res, file, res->getWriteOffset(), len, actuallyRead);
+                  retry = tryEndResult.first /*ok*/ && tryEndResult.second == false /*completed == false*/ ;
+                  completed = tryEndResult.second;
+              } while (retry);
+
+              if (completed)
+                  fclose(file);
+            };
+
+            res->onWritable([this, fillStream](uintmax_t offset) {
+              fillStream();
+              return true;
+            });
+
+            fillStream();
+        }
+    }
+};
+
+AsyncStreamer streamer;
+
 cWebBridgeServer::cWebBridgeServer(int portP, const char *Description, bool LowPriority) : cThread(Description, LowPriority) {
     port = portP;
     WebBridgeServer = this;
     svdrpSocket = nullptr;
+    streamer = AsyncStreamer("/home/rh/idea/vdr-plugin-webout/static-html");
 }
 
 cWebBridgeServer::~cWebBridgeServer() {
@@ -164,4 +275,107 @@ void cWebBridgeServer::Cancel(int WaitSeconds) {
     });
 
     cThread::Cancel(WaitSeconds);
+}
+
+int cWebBridgeServer::sendPngImage(int x, int y, int w, int h, int bufferSize, uint8_t *buffer) {
+    uint8_t sendBuffer[7 * sizeof(uint32_t) + bufferSize];
+
+    // get current OSD size
+    int width;
+    int height;
+    double pa;
+
+    cDevice::PrimaryDevice()->GetOsdSize(width, height, pa);
+
+    // fill buffer
+    ((uint32_t *) sendBuffer)[0] = MESSAGE_TYPE_PNG; // type PNG
+    ((uint32_t *) sendBuffer)[1] = width;
+    ((uint32_t *) sendBuffer)[2] = height;
+    ((uint32_t *) sendBuffer)[3] = x;
+    ((uint32_t *) sendBuffer)[4] = y;
+    ((uint32_t *) sendBuffer)[5] = w;
+    ((uint32_t *) sendBuffer)[6] = h;
+    memcpy(sendBuffer + 7 * sizeof(uint32_t), reinterpret_cast<const void *>(buffer), bufferSize);
+
+    // sanity check
+    if (svdrpSocket == nullptr) {
+        return -1;
+    }
+
+    return svdrpSocket->send(std::string_view((char *) &sendBuffer, 20 + bufferSize), uWS::OpCode::BINARY);
+}
+
+int cWebBridgeServer::scaleVideo(int top, int left, int w, int h) {
+    int count = 5;
+
+    uint8_t sendBuffer[count * sizeof(uint32_t)];
+
+    // fill buffer
+    ((uint32_t *) sendBuffer)[0] = MESSAGE_TYPE_SCALE_VIDEO;
+    ((uint32_t *) sendBuffer)[1] = top;
+    ((uint32_t *) sendBuffer)[2] = left;
+    ((uint32_t *) sendBuffer)[3] = w;
+    ((uint32_t *) sendBuffer)[4] = h;
+
+    // sanity check
+    if (svdrpSocket == nullptr) {
+        return -1;
+    }
+
+    return svdrpSocket->send(std::string_view((char *) &sendBuffer, count * sizeof(uint32_t)), uWS::OpCode::BINARY);
+}
+
+int cWebBridgeServer::sendSize() {
+    uint32_t sendBuffer[3];
+
+    int width;
+    int height;
+    double pa;
+
+    cDevice::PrimaryDevice()->GetOsdSize(width, height, pa);
+
+    // fill buffer
+    sendBuffer[0] = MESSAGE_TYPE_SIZE; // type SIZE
+    sendBuffer[1] = width;
+    sendBuffer[2] = height;
+
+    // sanity check
+    if (svdrpSocket == nullptr) {
+        return -1;
+    }
+
+    return svdrpSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
+}
+
+int cWebBridgeServer:: sendClearOsd() {
+    uint32_t sendBuffer[1];
+
+    // clear OSD
+    sendBuffer[0] = MESSAGE_TYPE_CLEAR_OSD; // type CLEAR_OSD
+
+    // sanity check
+    if (svdrpSocket == nullptr) {
+        return -1;
+    }
+
+    return svdrpSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
+}
+
+int cWebBridgeServer::sendPlayerReset() {
+    uint32_t sendBuffer[1];
+
+    // reset
+    sendBuffer[0] = MESSAGE_TYPE_RESET; // type RESET
+
+    // sanity check
+    if (svdrpSocket == nullptr) {
+        return -1;
+    }
+
+    return svdrpSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
+}
+
+void cWebBridgeServer::receiveKeyEvent(std::string_view event) {
+    std::string data = std::string(event);
+    webRemote.ProcessKey(data.c_str());
 }

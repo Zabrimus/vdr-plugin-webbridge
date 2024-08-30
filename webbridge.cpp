@@ -10,6 +10,8 @@
 #include "log.h"
 #include "webbridge.h"
 #include "server.h"
+#include "webdevice.h"
+#include "fpng.h"
 
 static const char *VERSION = "0.1.0";
 static const char *DESCRIPTION = "Bridge websockets and vdr: svdrp, osd, video (and for future use ...)";
@@ -82,6 +84,9 @@ bool cPluginWebbridge::ProcessArgs(int argc, char *argv[]) {
 bool cPluginWebbridge::Initialize() {
     // Initialize any background activities the plugin shall perform.
     new cWebBridgeServer(WebBridgeConfig.GetWebsocketPort());
+
+    new cWebDevice();
+    fpng::fpng_init();
 
     return true;
 }

@@ -11,6 +11,13 @@
 #include <App.h>
 #include <WebSocket.h>
 
+// message types (VDR --> Browser)
+const uint32_t MESSAGE_TYPE_PNG         = 1;
+const uint32_t MESSAGE_TYPE_SIZE        = 2;
+const uint32_t MESSAGE_TYPE_RESET       = 3;
+const uint32_t MESSAGE_TYPE_CLEAR_OSD   = 4;
+const uint32_t MESSAGE_TYPE_SCALE_VIDEO = 5;
+
 struct PerSocketData {
     /* Define your user data */
     int something;
@@ -52,6 +59,15 @@ public:
     ///< returns immediately, without killing the thread.
 
     void sendError(uWS::WebSocket<false, true, PerSocketData> *ws, const uWS::OpCode &opCode, int ret) const;
+
+    int sendPngImage(int x, int y, int w, int h, int bufferSize, uint8_t *buffer);
+    int sendSize();
+    int sendPlayerReset();
+    int sendClearOsd();
+
+    int scaleVideo(int top, int left, int w, int h);
+
+    void receiveKeyEvent(std::string_view event);
 };
 
 extern cWebBridgeServer *WebBridgeServer;
