@@ -1,0 +1,96 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Test</title>
+
+    <style>
+        body {
+            margin:0;
+            padding:0;
+        }
+
+        #video {
+            position: relative;
+        }
+
+        #osdCanvas {
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+        }
+
+        #container {
+            position: relative;
+        }
+
+        #video-wrapper {
+            height: 100%;
+            width: 100%;
+            padding-top: 0px;
+            padding-left: 0px;
+        }
+    </style>
+
+    <script type="text/javascript" charset="utf-8">
+        /* Websocket Connection */
+        let svdrpSocket = new WebSocket("ws://localhost:3000/svdrp");
+        svdrpSocket.binaryType = "arraybuffer";
+
+        svdrpSocket.onopen = function(e) {
+            console.log("[open] Connection established");
+        };
+
+        svdrpSocket.onmessage = function(event) {
+            console.log("Message received..." + event.data);
+
+            let str = new TextDecoder().decode(event.data)
+            const result = str.split(/\r?\n/);
+
+
+            for (i = 0; i < result.length; i++) {
+                document.getElementById("output").innerHTML += result[i] + "<br/>";
+            }
+        };
+
+        svdrpSocket.onclose = function(event) {
+            if (event.wasClean) {
+                console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+            } else {
+                // e.g. server process killed or network down
+                // event.code is usually 1006 in this case
+                console.log('[close] Connection died');
+            }
+        };
+
+        svdrpSocket.onerror = function(error) {
+            console.log(`[error] ${error.message}`);
+        };
+
+        /* formular */
+        function sendSvdrpCommand () {
+            let cmd = new TextEncoder().encode(document.getElementById("svdrp").value).buffer;
+            svdrpSocket.send(cmd);
+        };
+    </script>
+</head>
+
+<body>
+    <div id="container">
+        <label for="svdrp">SVDRP Command: </label>
+        <input type="svdrp" id="svdrp" name="command">
+        <button id="execute">Execute</button>
+    </div>
+
+    <div>
+        <span id="output"></span>
+    </div>
+
+
+    <script type="text/javascript" charset="utf-8">
+        document.getElementById('execute').addEventListener('click', function() {
+            sendSvdrpCommand();
+        });
+    </script>
+</body>
+</html>
