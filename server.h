@@ -29,6 +29,7 @@ private:
 
     uWS::App *globalApp;
     uWS::WebSocket<false, true, PerSocketData> *svdrpSocket;
+    uWS::WebSocket<false, true, PerSocketData> *osdSocket;
     uWS::Loop *globalAppLoop;
     us_listen_socket_t *listenSocket;
 

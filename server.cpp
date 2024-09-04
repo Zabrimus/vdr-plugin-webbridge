@@ -10,11 +10,13 @@
 #include <string>
 #include <filesystem>
 #include <utility>
+#include <vdr/plugin.h>
 #include "inetclientstream.hpp"
 #include "server.h"
 #include "log.h"
 #include "webremote.h"
 #include "ffmpeghls.h"
+#include "webdevice.h"
 
 using libsocket::inet_stream;
 
@@ -132,7 +134,9 @@ cWebBridgeServer::cWebBridgeServer(int portP, const char *Description, bool LowP
     port = portP;
     WebBridgeServer = this;
     svdrpSocket = nullptr;
-    streamer = AsyncStreamer("/home/rh/idea/vdr-plugin-webout/static-html");
+
+    cString staticPath = cString::sprintf("%s/live",cPlugin::ConfigDirectory(PLUGIN_NAME_I18N));
+    streamer = AsyncStreamer(*staticPath);
 }
 
 cWebBridgeServer::~cWebBridgeServer() {
@@ -206,7 +210,6 @@ void cWebBridgeServer::Action() {
             },
 
             .drain = [](auto *) {
-              printf("Drain\n");
             },
 
             .close = [this](auto *, int, std::string_view) {
@@ -214,9 +217,85 @@ void cWebBridgeServer::Action() {
             }
         })
 
+        .ws<PerSocketData>("/tv", {
+            .compression = uWS::SHARED_COMPRESSOR,
+            .maxPayloadLength = 1 * 1024 * 1024,
+            .idleTimeout = 12,
+            .maxBackpressure = 1 * 1024 * 1024,
+            .upgrade = [](auto *res, auto *req, auto *context) {
+              res->template upgrade<PerSocketData>({
+                                                       /* We initialize PerSocketData struct here */
+                                                       .something = 13
+                                                   }, req->getHeader("sec-websocket-key"),
+                                                   req->getHeader("sec-websocket-protocol"),
+                                                   req->getHeader("sec-websocket-extensions"),
+                                                   context);
+            },
+
+            .open = [this](auto *ws) {
+              osdSocket = ws;
+              sendSize();
+              webDevice->Activate(true);
+            },
+
+            .message = [this](auto *ws, std::string_view message, uWS::OpCode opCode) {
+              debug5("Got message: %s:%ld", std::string(message).c_str(), message.length());
+
+              long unsigned int position;
+              if ((position = message.find(':')) != std::string::npos) {
+                  auto token = message.substr(0, position - 1);
+                  auto data = message.substr(position + 1, message.length());
+
+                  if (token.compare("3")) {
+                      // got key from browser
+                      receiveKeyEvent(data);
+                  }
+              }
+            },
+
+            .drain = [](auto */*ws*/) {
+              /* Check ws->getBufferedAmount() here */
+            },
+
+            .close = [this](auto */*ws*/, int /*code*/, std::string_view /*message*/) {
+              osdSocket = nullptr;
+              webDevice->Activate(false);
+            }
+        })
+
+        .get("/", [this](auto *res, auto *req) {
+          // send index.html
+          res->writeHeader("Content-Type", "text/html; charset=utf-8");
+          streamer.streamFile(res, "/index.html");
+        })
+
+        .get("/video.js", [](auto *res, auto *req) {
+          res->writeHeader("Content-Type", "application/javascript");
+          streamer.streamFile(res, "/video.min.js");
+        })
+
+        .get("/video-js.css", [](auto *res, auto *req) {
+          res->writeHeader("Content-Type", "text/css");
+          streamer.streamFile(res, "/video-js.css");
+        })
+
+        .get("/stream/*", [](auto *res, auto *req) {
+          // send video stream / m3u8
+          streamer.streamVideo(res, req->getUrl());
+        })
+
+        .get("/*", [](auto *res, auto *req) {
+          debug1("File %s is not configured\n", std::string(req->getUrl()).c_str());
+
+          res->writeStatus("404 Not Found");
+          res->writeHeader("Content-Type", "text/html; charset=utf-8");
+          res->end("<b>404 Not Found</b>");
+        })
+
         .listen(port, [this](auto *socket) {
           if (socket) {
-              std::cout << "Start WebBridgeServer on port " << port << std::endl;
+              info("Start WebBridgeServer on port %d", port);
+              printf("Start WebBridgeServer on port %d", port);
               this->listenSocket = socket;
           }
         });
@@ -268,11 +347,11 @@ int cWebBridgeServer::sendPngImage(int x, int y, int w, int h, int bufferSize, u
     memcpy(sendBuffer + 7 * sizeof(uint32_t), reinterpret_cast<const void *>(buffer), bufferSize);
 
     // sanity check
-    if (svdrpSocket == nullptr) {
+    if (osdSocket == nullptr) {
         return -1;
     }
 
-    return svdrpSocket->send(std::string_view((char *) &sendBuffer, 20 + bufferSize), uWS::OpCode::BINARY);
+    return osdSocket->send(std::string_view((char *) &sendBuffer, 20 + bufferSize), uWS::OpCode::BINARY);
 }
 
 int cWebBridgeServer::scaleVideo(int top, int left, int w, int h) {
@@ -288,11 +367,11 @@ int cWebBridgeServer::scaleVideo(int top, int left, int w, int h) {
     ((uint32_t *) sendBuffer)[4] = h;
 
     // sanity check
-    if (svdrpSocket == nullptr) {
+    if (osdSocket == nullptr) {
         return -1;
     }
 
-    return svdrpSocket->send(std::string_view((char *) &sendBuffer, count * sizeof(uint32_t)), uWS::OpCode::BINARY);
+    return osdSocket->send(std::string_view((char *) &sendBuffer, count * sizeof(uint32_t)), uWS::OpCode::BINARY);
 }
 
 int cWebBridgeServer::sendSize() {
@@ -310,11 +389,11 @@ int cWebBridgeServer::sendSize() {
     sendBuffer[2] = height;
 
     // sanity check
-    if (svdrpSocket == nullptr) {
+    if (osdSocket == nullptr) {
         return -1;
     }
 
-    return svdrpSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
+    return osdSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
 }
 
 int cWebBridgeServer:: sendClearOsd() {
@@ -324,11 +403,11 @@ int cWebBridgeServer:: sendClearOsd() {
     sendBuffer[0] = MESSAGE_TYPE_CLEAR_OSD; // type CLEAR_OSD
 
     // sanity check
-    if (svdrpSocket == nullptr) {
+    if (osdSocket == nullptr) {
         return -1;
     }
 
-    return svdrpSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
+    return osdSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
 }
 
 int cWebBridgeServer::sendPlayerReset() {
@@ -338,11 +417,11 @@ int cWebBridgeServer::sendPlayerReset() {
     sendBuffer[0] = MESSAGE_TYPE_RESET; // type RESET
 
     // sanity check
-    if (svdrpSocket == nullptr) {
+    if (osdSocket == nullptr) {
         return -1;
     }
 
-    return svdrpSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
+    return osdSocket->send(std::string_view((char *) &sendBuffer, sizeof(sendBuffer)), uWS::OpCode::BINARY);
 }
 
 void cWebBridgeServer::receiveKeyEvent(std::string_view event) {
