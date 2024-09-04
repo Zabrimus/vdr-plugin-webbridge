@@ -41,6 +41,8 @@ PKGCFG = $(if $(VDRDIR),$(shell $(PKG_CONFIG) --variable=$(1) $(VDRDIR)/vdr.pc),
 LIBDIR = $(call PKGCFG,libdir)
 LOCDIR = $(call PKGCFG,locdir)
 PLGCFG = $(call PKGCFG,plgcfg)
+RESDIR = $(call PKGCFG,resdir)
+CFGDIR = $(call PKGCFG,configdir)
 #
 TMPDIR ?= /tmp
 
@@ -140,7 +142,11 @@ uSockets:
 install-lib: $(SOFILE)
 	install -D $^ $(DESTDIR)$(LIBDIR)/$^.$(APIVERSION)
 
-install: all install-lib install-i18n
+install-static:
+	@mkdir -p $(DESTDIR)$(CFGDIR)/plugins/$(PLUGIN)/live
+	@cp -pn static-html/* $(DESTDIR)$(CFGDIR)/plugins/$(PLUGIN)/live
+
+install: all install-lib install-i18n install-static
 
 dist: $(I18Npo) clean
 	@-rm -rf $(TMPDIR)/$(ARCHIVE)
