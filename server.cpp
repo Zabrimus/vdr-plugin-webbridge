@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <utility>
 #include <vdr/plugin.h>
+#include <vdr/config.h>
 #include "inetclientstream.hpp"
 #include "server.h"
 #include "log.h"
@@ -19,6 +20,27 @@
 #include "webdevice.h"
 
 using libsocket::inet_stream;
+
+std::string_view addressAsText(std::string_view binary) {
+    static thread_local char buf[64];
+    int ipLength = 0;
+
+    if (!binary.length()) {
+        return {};
+    }
+
+    unsigned char *b = (unsigned char *) binary.data();
+
+    if (binary.length() == 4) {
+        ipLength = snprintf(buf, 64, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
+    } else {
+        ipLength = snprintf(buf, 64, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11],
+                            b[12], b[13], b[14], b[15]);
+    }
+
+    return {buf, (unsigned int) ipLength};
+}
 
 cWebBridgeServer *WebBridgeServer;
 
@@ -160,8 +182,18 @@ void cWebBridgeServer::Action() {
                                                    context);
             },
 
-            .open = [this](auto *ws) {
-              svdrpSocket = ws;
+            .open = [this](uWS::WebSocket<false, true, PerSocketData> *ws) {
+                auto ipStr = addressAsText(ws->getRemoteAddress().substr(12));
+                struct sockaddr_in sa;
+                inet_pton(AF_INET, std::string(ipStr).c_str(), &(sa.sin_addr));
+
+                if (!SVDRPhosts.Acceptable(sa.sin_addr.s_addr)) {
+                    char denStr[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &(sa.sin_addr), denStr, INET_ADDRSTRLEN);
+
+                    error("Connection denied from %s", denStr);
+                    ws->close();
+                }
             },
 
             .message = [this](auto *ws, std::string_view message, uWS::OpCode opCode) {
