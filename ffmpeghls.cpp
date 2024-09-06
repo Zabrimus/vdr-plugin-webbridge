@@ -1,35 +1,52 @@
 #include <iomanip>
 #include <vdr/device.h>
+#include <vdr/plugin.h>
 #include "log.h"
 #include "ffmpeghls.h"
 
 const char *STREAM_DIR = "/tmp/vdr-live-tv-stream";
 
-const std::string VIDEO_ENCODE_H264 = "-crf 23 -c:v libx264 -tune zerolatency -vf format=yuv420p -preset ultrafast -qp 0 ";
-const std::string VIDEO_ENCODE_COPY = "-c:v copy";
-//const std::string AUDIO_ENCODE_AAC = "-c:a aac -b:a 384k -channel_layout 5.1";
-const std::string AUDIO_ENCODE_AAC = "-c:a aac -vbr 5 -channel_layout 5.1";
-const std::string AUDIO_ENCODE_COPY = "-c:a copy";
+cFFmpegHLS::cFFmpegHLS(bool isReplay, cString channel, cString recName) {
+    cString cmdLineScript;
+    cString transcodeCmdLine;
 
-cFFmpegHLS::cFFmpegHLS(bool copyVideo, bool isReplay) {
-    copyVideo = true;
+    std::vector<std::string> callStr;
+    printf("Channel: %s\n", *channel);
 
-    std::filesystem::remove_all(STREAM_DIR);
-    std::filesystem::create_directories(STREAM_DIR);
+    if (isReplay) {
+        callStr.emplace_back(std::string(cPlugin::ConfigDirectory(PLUGIN_NAME_I18N)) + "/stream_recording.sh");
+        callStr.emplace_back(*recName);
+    } else {
+        callStr.emplace_back(std::string(cPlugin::ConfigDirectory(PLUGIN_NAME_I18N)) + "/stream_live.sh");
+        callStr.emplace_back(*channel);
+    }
 
-    std::string ffmpeg = std::string("ffmpeg ") + std::string(isReplay ? "-re " : "") + std::string(
-        "-i - -v panic -hide_banner -ignore_unknown -fflags flush_packets -max_delay 5 -flags -global_header -hls_time 5 -hls_list_size 3 ")
-        + std::string(" -hls_delete_threshold 3 -hls_segment_filename 'vdr-live-tv-%03d.ts' -hls_segment_type mpegts ")
-        + std::string(" -hls_flags delete_segments ")
-        + std::string(" -map 0:v -map 0:a?")
-        + std::string(" ") + (copyVideo ? VIDEO_ENCODE_COPY : VIDEO_ENCODE_H264)
-        // + std::string(" ") + (IS_DOLBY_TRACK(cDevice::PrimaryDevice()->GetCurrentAudioTrack()) ? AUDIO_ENCODE_COPY : AUDIO_ENCODE_AAC)
-        + std::string(" ") + AUDIO_ENCODE_AAC
-        + std::string(" -y vdr-live-tv.m3u8");
+    // call the script and read the constructed commandline
+    auto cmdLineProcess = new TinyProcessLib::Process(callStr, "",
+                                                [&transcodeCmdLine](const char *bytes, size_t n) {
+                                                  std::string msg = std::string(bytes, n);
+                                                  transcodeCmdLine = transcodeCmdLine.Append(msg.c_str());
+                                                },
 
-    printf("=> Call ffmpeg with '%s'\n", ffmpeg.c_str());
+                                                [](const char *bytes, size_t n) {
+                                                  std::string msg = std::string(bytes, n);
+                                                  error("Error: %s\n", msg.c_str());
+                                                },
 
-    ffmpegProcess = new TinyProcessLib::Process(ffmpeg, STREAM_DIR, nullptr, nullptr, true);
+                                                true
+    );
+
+    cmdLineProcess->get_exit_status();
+
+    debug1("Transcoder command line: %s", *transcodeCmdLine);
+    printf("Transcoder command line: %s\n", *transcodeCmdLine);
+
+    if (strlen(*transcodeCmdLine) == 0) {
+        error("Transcode commandline is empty");
+        return;
+    }
+
+    ffmpegProcess = new TinyProcessLib::Process(*transcodeCmdLine, STREAM_DIR, nullptr, nullptr, true);
 
     int exitStatus;
 

@@ -43,7 +43,8 @@ const char *cPluginWebbridge::CommandLineHelp() {
     debug1("%s", __PRETTY_FUNCTION__);
 
     // Return a string that describes all known command line options.
-    return "  -p <num>,  --port=<number>           port of the internal websocket\n"
+    return "  -h <host>, --host=hostname           hostname/ip of the VDR\n"
+           "  -p <num>,  --port=<number>           port of the internal websocket\n"
            "  -t <mode>, --trace=<mode>            set the tracing mode\n";
 }
 
@@ -52,13 +53,14 @@ bool cPluginWebbridge::ProcessArgs(int argc, char *argv[]) {
 
     // Implement command line argument processing here if applicable.
     static const struct option long_options[] = {
+        {"host", required_argument, nullptr, 'h'},
         {"port", required_argument, nullptr, 'p'},
         {"trace", required_argument, nullptr, 't'},
         {nullptr, no_argument, nullptr, 0}
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "p:t:", long_options, nullptr))!=-1) {
+    while ((c = getopt_long(argc, argv, "p:t:h:", long_options, nullptr))!=-1) {
         switch (c) {
         case 't':
             WebBridgeConfig.SetTraceMode(strtol(optarg, nullptr, 0));
@@ -68,6 +70,10 @@ bool cPluginWebbridge::ProcessArgs(int argc, char *argv[]) {
             WebBridgeConfig.SetWebsocketPort(strtol(optarg, nullptr, 0));
             break;
 
+        case 'h':
+            WebBridgeConfig.SetWebsocketHost(optarg);
+            break;
+
         default:
             return false;
         }
@@ -75,7 +81,13 @@ bool cPluginWebbridge::ProcessArgs(int argc, char *argv[]) {
 
     // set default value
     if (WebBridgeConfig.GetWebsocketPort() == 0) {
+        debug1("Set default port 3000");
         WebBridgeConfig.SetWebsocketPort(3000);
+    }
+
+    if (strlen(*WebBridgeConfig.GetWebsocketHost()) == 0) {
+        debug1("Set default host 127.0.0.1");
+        WebBridgeConfig.SetWebsocketHost("127.0.0.1");
     }
 
     return true;
