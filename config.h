@@ -9,10 +9,13 @@
 
 #include <vdr/menuitems.h>
 
+#include <utility>
+
 class cWebBridgeConfig {
 private:
     unsigned int traceModeM;
     unsigned int port;
+    cString host = "";
     char configDirectory[PATH_MAX];
 
 public:
@@ -39,6 +42,9 @@ public:
 
     void SetWebsocketPort(unsigned int portP) { port = portP; };
     unsigned int GetWebsocketPort() const { return port; };
+    void SetWebsocketHost(cString hostP) { host = std::move(hostP); };
+    cString GetWebsocketHost() const { return host; };
+
     const char *GetConfigDirectory() const { return configDirectory; };
 };
 

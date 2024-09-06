@@ -34,6 +34,7 @@
         }
     </style>
 
+    <script type="text/javascript" src="/vdrconfig"></script>
     <script type="text/javascript" charset="utf-8">
         /* key events send to VDR */
         window.addEventListener(
@@ -123,7 +124,8 @@
         }
 
         /* Websocket Connection */
-        let osdSocket = new WebSocket("ws://localhost:3000/tv");
+        console.log("Connect to VDR with address " + vdr_host + ":" + vdr_port);
+        let osdSocket = new WebSocket("ws://" + vdr_host + ":" + vdr_port + "/tv");
         osdSocket.binaryType = "arraybuffer";
 
         osdSocket.onopen = function(e) {

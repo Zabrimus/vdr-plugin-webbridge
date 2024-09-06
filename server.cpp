@@ -17,6 +17,7 @@
 #include "webremote.h"
 #include "ffmpeghls.h"
 #include "webdevice.h"
+#include "config.h"
 
 using libsocket::inet_stream;
 
@@ -267,6 +268,16 @@ void cWebBridgeServer::Action() {
           // send index.html
           res->writeHeader("Content-Type", "text/html; charset=utf-8");
           streamer.streamFile(res, "/index.html");
+        })
+
+        .get("/vdrconfig", [this](auto *res, auto *req) {
+          // send parameter
+          res->writeStatus(uWS::HTTP_200_OK);
+          res->writeHeader("Content-Type", "application/javascript");
+          res->write("vdr_host=\""); res->write(*WebBridgeConfig.GetWebsocketHost()); res->write("\";\n");
+          res->write("vdr_port=\""); res->write(std::to_string(WebBridgeConfig.GetWebsocketPort()));  res->write("\";\n");
+          res->end("");
+          WebBridgeConfig.GetWebsocketPort();
         })
 
         .get("/video.js", [](auto *res, auto *req) {

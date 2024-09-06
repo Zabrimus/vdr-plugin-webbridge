@@ -29,10 +29,6 @@ U_LIBSOCKET_OBJS_C=thirdparty/libsocket-$(U_LIBSOCKET_VERSION)/C/unix/libunixsoc
 U_TINY_PROCESS_LIBRARY_INCLUDE=thirdparty/tiny-process-library
 U_TINY_PROCESS_LIBRARY_OBJ=thirdparty/tiny-process-library/process_unix.o thirdparty/tiny-process-library/process.o
 
-# ffmpeg
-FFMPEG_CFLAGS += $(shell pkg-config --cflags libavutil libavcodec libavdevice libavformat libswresample x264 x265 fdk-aac)
-FFMPEG_LDFLAGS += $(shell pkg-config --libs libavutil libavcodec libavdevice libavformat libswresample x264 x265 fdk-aac)
-
 ### The directory environment:
 
 # Use package data if installed...otherwise assume we're under the VDR source directory:
@@ -144,7 +140,10 @@ install-lib: $(SOFILE)
 
 install-static:
 	@mkdir -p $(DESTDIR)$(CFGDIR)/plugins/$(PLUGIN)/live
-	@cp -pn static-html/* $(DESTDIR)$(CFGDIR)/plugins/$(PLUGIN)/live
+	@cp -a static-html/* $(DESTDIR)$(CFGDIR)/plugins/$(PLUGIN)/live
+	@cp -a scripts/* $(DESTDIR)$(CFGDIR)/plugins/$(PLUGIN)/
+	@chmod +x $(DESTDIR)$(CFGDIR)/plugins/$(PLUGIN)/stream_live.sh
+	@chmod +x $(DESTDIR)$(CFGDIR)/plugins/$(PLUGIN)/stream_recording.sh
 
 install: all install-lib install-i18n install-static
 

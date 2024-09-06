@@ -111,9 +111,15 @@ void cWebDevice::MakePrimaryDevice(bool On) {
 void cWebDevice::Activate(bool On) {
     if (On) {
         lastPrimaryDevice = cDevice::PrimaryDevice()->DeviceNumber();
+        cString channelText;
 
-        // TODO: Copy Video bestimmen
-        ffmpegHls = new cFFmpegHLS(false, false);
+        {
+            LOCK_CHANNELS_READ
+            const cChannel *channel = Channels->GetByNumber(cDevice::CurrentChannel());
+            channelText = channel->ToText();
+        }
+
+        ffmpegHls = new cFFmpegHLS(false, channelText, nullptr);
 
         // switch primary device to webdevice
         Setup.PrimaryDVB = DeviceNumber() + 1;
@@ -171,8 +177,15 @@ void cWebDevice::channelSwitch() {
         delete ffmpegHls;
     }
 
-    // TODO: Copy video
-    ffmpegHls = new cFFmpegHLS(false, false);
+    cString channelText;
+
+    {
+        LOCK_CHANNELS_READ
+        const cChannel *channel = Channels->GetByNumber(cDevice::CurrentChannel());
+        channelText = channel->ToText();
+    }
+
+    ffmpegHls = new cFFmpegHLS(false, channelText, "");
 
     WebBridgeServer->sendPlayerReset();
 }
@@ -196,8 +209,7 @@ void cWebDevice::Replaying(bool On) {
         delete ffmpegHls;
     }
 
-    // TODO: Copy video
-    ffmpegHls = new cFFmpegHLS(false, true);
+    ffmpegHls = new cFFmpegHLS(true, "", "");
 
     WebBridgeServer->sendPlayerReset();
 }
