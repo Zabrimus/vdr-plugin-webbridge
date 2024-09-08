@@ -29,7 +29,7 @@ cWebDevice::~cWebDevice() {
 }
 
 bool cWebDevice::HasDecoder() const {
-    debug3("%s", __PRETTY_FUNCTION__);
+    debug5("%s", __PRETTY_FUNCTION__);
     return true;
 }
 
@@ -103,12 +103,16 @@ bool cWebDevice::Poll(cPoller &Poller, int TimeoutMs) {
 }
 
 void cWebDevice::MakePrimaryDevice(bool On) {
+    debug1("%s", __PRETTY_FUNCTION__);
+
     if (On) {
         new cWebOsdProvider();
     }
 }
 
 void cWebDevice::Activate(bool On) {
+    debug1("%s: On %s", __PRETTY_FUNCTION__, On ? "true" : "false");
+
     if (On) {
         lastPrimaryDevice = cDevice::PrimaryDevice()->DeviceNumber();
         cString channelText;
@@ -119,7 +123,7 @@ void cWebDevice::Activate(bool On) {
             channelText = channel->ToText();
         }
 
-        ffmpegHls = new cFFmpegHLS(false, channelText, nullptr);
+        ffmpegHls = new cFFmpegHLS(false, channelText, "", "");
 
         // switch primary device to webdevice
         Setup.PrimaryDVB = DeviceNumber() + 1;
@@ -185,12 +189,14 @@ void cWebDevice::channelSwitch() {
         channelText = channel->ToText();
     }
 
-    ffmpegHls = new cFFmpegHLS(false, channelText, "");
+    ffmpegHls = new cFFmpegHLS(false, channelText, "", "");
 
     WebBridgeServer->sendPlayerReset();
 }
 
 void cWebDevice::changeAudioTrack() {
+    debug1("%s", __PRETTY_FUNCTION__);
+
     // printf("ChangeAudioTrack from %d to %d\n", currentAudioPid, getCurrentAudioPID());
 
     // TODO: currently disabled
@@ -205,11 +211,11 @@ void cWebDevice::changeAudioTrack() {
 void cWebDevice::Replaying(bool On) {
     debug1("%s, Replaying: %s", __PRETTY_FUNCTION__, On ? "An" : "Aus");
 
-    if (ffmpegHls!=nullptr) {
-        delete ffmpegHls;
-    }
+    // TODO:
+    //  Replaying off sollte wieder auf das TV-Bild wechseln
 
-    ffmpegHls = new cFFmpegHLS(true, "", "");
+    delete ffmpegHls;
+    ffmpegHls = new cFFmpegHLS(true, "", recName, recFileName);
 
     WebBridgeServer->sendPlayerReset();
 }

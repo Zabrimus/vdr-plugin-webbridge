@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# $1 is the recording filename
+# $1 is the recording name
+# $2 is the recording filename
 #
 # Evaluate the recording and construct your own ffmpeg/vlc command
 #
 
 # Set accordingly
 ENCODE_VIDEO=false
-ENCODE_AUDIO=false
+ENCODE_AUDIO=true
 
 # Video/Audio encode/copy parameter
 VIDEO_ENCODE="-crf 23 -c:v libx264 -tune zerolatency -vf format=yuv420p -preset ultrafast -qp 0"

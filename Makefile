@@ -47,6 +47,8 @@ TMPDIR ?= /tmp
 export CFLAGS   = $(call PKGCFG,cflags)
 export CXXFLAGS = $(call PKGCFG,cxxflags) -std=c++17 -fno-strict-aliasing -O3 -DFPNG_NO_SSE=1  #-DSSE=1 -DFPNG_NO_SSE=0 -msse4.1 -mpclmul
 
+LDFLAGS += -lstdc++fs
+
 ### The version number of VDR's plugin API:
 
 APIVERSION = $(call PKGCFG,apiversion)

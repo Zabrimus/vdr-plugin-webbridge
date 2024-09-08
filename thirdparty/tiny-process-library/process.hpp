@@ -123,6 +123,8 @@ public:
   bool try_get_exit_status(int &exit_status) noexcept;
   /// Write to stdin.
   bool write(const char *bytes, size_t n);
+  /// Write to stdin.
+  ssize_t writeBytes(const char *bytes, size_t n);
   /// Write to stdin. Convenience function using write(const char *, size_t).
   bool write(const std::string &str);
   /// Close stdin. If the process takes parameters from stdin, use this to notify that all parameters have been sent.

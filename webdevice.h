@@ -12,6 +12,9 @@ private:
     cFFmpegHLS *ffmpegHls;
     cWebStatus *webStatus;
 
+    cString recName;
+    cString recFileName;
+
 public:
     cWebDevice();
     ~cWebDevice() override;
@@ -45,6 +48,9 @@ public:
     void channelSwitch();
     void changeAudioTrack();
     void Replaying(bool On);
+
+    void SetRecordingName(const char* Name) { recName = cString(Name); };
+    void SetRecordingFileName(const char* FileName) { recFileName = cString(FileName); };
 
 protected:
     void MakePrimaryDevice(bool On) override;
