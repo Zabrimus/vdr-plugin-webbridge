@@ -34,8 +34,8 @@ if [ "${IS_RADIO}" = "0" ]; then
 cat<<EOF
 ffmpeg -i - \
       -v panic -hide_banner -ignore_unknown \
-      -fflags flush_packets -max_delay 5 -flags -global_header \
-      -hls_time 5 -hls_list_size 3 -hls_delete_threshold 3 \
+      -fflags flush_packets -max_delay 1 -flags -global_header \
+      -hls_time 1 -hls_list_size 10 -hls_delete_threshold 10 \
       -hls_segment_filename 'vdr-live-tv-%05d.ts' \
       -hls_segment_type mpegts \
       -hls_flags delete_segments \

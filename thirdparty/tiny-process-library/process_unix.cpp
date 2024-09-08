@@ -337,6 +337,17 @@ bool Process::write(const char *bytes, size_t n) {
   return false;
 }
 
+ssize_t Process::writeBytes(const char *bytes, size_t n) {
+    if(!open_stdin)
+        throw std::invalid_argument("Can't write to an unopened stdin pipe. Please set open_stdin=true when constructing the process.");
+
+    std::lock_guard<std::mutex> lock(stdin_mutex);
+    if(stdin_fd) {
+        return ::write(*stdin_fd, bytes, n);
+    }
+    return -1;
+}
+
 void Process::close_stdin() noexcept {
   std::lock_guard<std::mutex> lock(stdin_mutex);
   if(stdin_fd) {
