@@ -11,7 +11,7 @@ private:
     TinyProcessLib::Process *ffmpegProcess;
 
 public:
-    explicit cFFmpegHLS(bool isReplay, cString channel, cString recName);
+    explicit cFFmpegHLS(bool isReplay, cString channel, cString recName, cString recFileName);
     ~cFFmpegHLS();
 
     void Receive(const uchar *Data, int Length);
