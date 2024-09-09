@@ -2,22 +2,42 @@
 #include <filesystem>
 #include <vdr/device.h>
 #include <vdr/plugin.h>
+#include <vdr/tools.h>
 #include "log.h"
 #include "ffmpeghls.h"
 
 const char *STREAM_DIR = "/tmp/vdr-live-tv-stream";
 
+void killPid(int pid, int signal) {
+    std::string procf("/proc/");
+    procf.append(std::to_string(pid));
+
+    struct stat sts{};
+    if (!(stat(procf.c_str(), &sts) == -1 && errno == ENOENT)) {
+        kill(-pid, signal);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        kill(pid, signal);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    if (!(stat(procf.c_str(), &sts) == -1 && errno == ENOENT)) {
+        // must not happen
+        // printf("Prozess %d läuft noch\n", pid);
+    }
+}
+
 cFFmpegHLS::cFFmpegHLS(bool isReplay, cString channel, cString recName, cString recFileName) {
     debug1("%s: Channel %s, RecName %s, RecFileName %s", __PRETTY_FUNCTION__, *channel, *recName, *recFileName);
 
-    // create at first the tmp directory if it not exists
-    if (!std::filesystem::is_directory(STREAM_DIR) || !std::filesystem::exists(STREAM_DIR)) {
-        std::filesystem::create_directory(STREAM_DIR);
+    // delete directory if it exists
+    if (!RemoveFileOrDir(STREAM_DIR, false)) {
+        error("Unable to delete directory %s\n", STREAM_DIR);
+    } else {
+        debug1("Directory %s removed.", STREAM_DIR);
     }
 
-    for(auto& dir_element : std::filesystem::directory_iterator(STREAM_DIR)) {
-        std::filesystem::remove_all(dir_element.path());
-    }
+    // create  the tmp directory
+    std::filesystem::create_directory(STREAM_DIR);
 
     cString cmdLineScript;
     cString transcodeCmdLine;
@@ -53,7 +73,18 @@ cFFmpegHLS::cFFmpegHLS(bool isReplay, cString channel, cString recName, cString 
                                                 true
     );
 
+    int pid = cmdLineProcess->get_id();
+
+    printf("CmdLind Pid: %d\n", pid);
+
     cmdLineProcess->get_exit_status();
+
+    killPid(pid, SIGKILL);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    killPid(pid, SIGTERM);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+    delete cmdLineProcess;
 
     debug1("Transcoder command line: %s", *transcodeCmdLine);
 
@@ -63,6 +94,7 @@ cFFmpegHLS::cFFmpegHLS(bool isReplay, cString channel, cString recName, cString 
     }
 
     ffmpegProcess = new TinyProcessLib::Process(*transcodeCmdLine, STREAM_DIR, nullptr, nullptr, true);
+    printf("ffmpeg pid %d\n", ffmpegProcess->get_id());
 
     int exitStatus;
 
@@ -75,15 +107,29 @@ cFFmpegHLS::~cFFmpegHLS() {
     debug1("%s", __PRETTY_FUNCTION__);
 
     if (ffmpegProcess!=nullptr) {
-        ffmpegProcess->close_stdin();
-        ffmpegProcess->kill(true);
-        ffmpegProcess->get_exit_status();
-
+        auto t = ffmpegProcess;
         ffmpegProcess = nullptr;
+
+        t->close_stdin();
+
+        int pid = t->get_id();
+        killPid(pid, SIGKILL);
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        killPid(pid, SIGTERM);
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+        delete t;
+
+        // ffmpegProcess->get_exit_status();
+
+        debug1("ffmpegProcess killed");
     }
 
-    for(auto& dir_element : std::filesystem::directory_iterator(STREAM_DIR)) {
-        std::filesystem::remove_all(dir_element.path());
+    // delete directory if it exists
+    if (!RemoveFileOrDir(STREAM_DIR, false)) {
+        error("Unable to delete directory %s\n", STREAM_DIR);
+    } else {
+        debug1("Directory %s removed.", STREAM_DIR);
     }
 }
 

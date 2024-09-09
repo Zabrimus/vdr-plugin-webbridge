@@ -29,7 +29,7 @@ cWebDevice::~cWebDevice() {
 }
 
 bool cWebDevice::HasDecoder() const {
-    debug5("%s", __PRETTY_FUNCTION__);
+    debug9("%s", __PRETTY_FUNCTION__);
     return true;
 }
 
@@ -39,37 +39,37 @@ bool cWebDevice::SetPlayMode(ePlayMode PlayMode) {
 }
 
 int cWebDevice::PlayVideo(const uchar *Data, int Length) {
-    debug4("%s", __PRETTY_FUNCTION__);
+    debug9("%s", __PRETTY_FUNCTION__);
     return Length;
 }
 
 int cWebDevice::PlayAudio(const uchar *Data, int Length, uchar Id) {
-    debug4("%s", __PRETTY_FUNCTION__);
+    debug9("%s", __PRETTY_FUNCTION__);
     return Length;
 }
 
 int cWebDevice::PlayTsVideo(const uchar *Data, int Length) {
-    debug4("%s", __PRETTY_FUNCTION__);
+    debug9("%s", __PRETTY_FUNCTION__);
     return Length;
 }
 
 int cWebDevice::PlayTsAudio(const uchar *Data, int Length) {
-    debug4("%s", __PRETTY_FUNCTION__);
+    debug9("%s", __PRETTY_FUNCTION__);
     return Length;
 }
 
 int cWebDevice::PlayTsSubtitle(const uchar *Data, int Length) {
-    debug4("%s", __PRETTY_FUNCTION__);
+    debug9("%s", __PRETTY_FUNCTION__);
     return Length;
 }
 
 int cWebDevice::PlayPes(const uchar *Data, int Length, bool VideoOnly) {
-    debug4("%s", __PRETTY_FUNCTION__);
+    debug9("%s", __PRETTY_FUNCTION__);
     return Length;
 }
 
 int cWebDevice::PlayTs(const uchar *Data, int Length, bool VideoOnly) {
-    debug4("%s", __PRETTY_FUNCTION__);
+    debug9("%s", __PRETTY_FUNCTION__);
 
     if (ffmpegHls!=nullptr) {
         if (Length==188) {
@@ -90,6 +90,18 @@ int cWebDevice::PlayTs(const uchar *Data, int Length, bool VideoOnly) {
     }
 
     return Length;
+}
+
+void cWebDevice::Clear() {
+    debug1("%s", __PRETTY_FUNCTION__);
+
+    cDevice::Clear();
+}
+
+void cWebDevice::Play() {
+    debug1("%s", __PRETTY_FUNCTION__);
+
+    cDevice::Play();
 }
 
 bool cWebDevice::Flush(int TimeoutMs) {
@@ -113,6 +125,12 @@ void cWebDevice::MakePrimaryDevice(bool On) {
 void cWebDevice::Activate(bool On) {
     debug1("%s: On %s", __PRETTY_FUNCTION__, On ? "true" : "false");
 
+    if (ffmpegHls!=nullptr) {
+        auto t = ffmpegHls;
+        ffmpegHls = nullptr;
+        delete t;
+    }
+
     if (On) {
         lastPrimaryDevice = cDevice::PrimaryDevice()->DeviceNumber();
         cString channelText;
@@ -130,11 +148,6 @@ void cWebDevice::Activate(bool On) {
 
         webStatus = new cWebStatus();
     } else {
-        if (ffmpegHls!=nullptr) {
-            delete ffmpegHls;
-            ffmpegHls = nullptr;
-        }
-
         if (webStatus!=nullptr) {
             DELETENULL(webStatus);
         }
@@ -178,7 +191,9 @@ void cWebDevice::channelSwitch() {
     debug1("%s", __PRETTY_FUNCTION__);
 
     if (ffmpegHls!=nullptr) {
-        delete ffmpegHls;
+        auto t = ffmpegHls;
+        ffmpegHls = nullptr;
+        delete t;
     }
 
     cString channelText;
@@ -211,11 +226,13 @@ void cWebDevice::changeAudioTrack() {
 void cWebDevice::Replaying(bool On) {
     debug1("%s, Replaying: %s", __PRETTY_FUNCTION__, On ? "An" : "Aus");
 
-    // TODO:
-    //  Replaying off sollte wieder auf das TV-Bild wechseln
+    auto t = ffmpegHls;
+    ffmpegHls = nullptr;
+    delete t;
 
-    delete ffmpegHls;
-    ffmpegHls = new cFFmpegHLS(true, "", recName, recFileName);
+    if (On) {
+        ffmpegHls = new cFFmpegHLS(true, "", recName, recFileName);
+    }
 
     WebBridgeServer->sendPlayerReset();
 }
