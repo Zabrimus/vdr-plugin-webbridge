@@ -35,6 +35,9 @@ public:
     int PlayPes(const uchar *Data, int Length, bool VideoOnly) override;
     int PlayTs(const uchar *Data, int Length, bool VideoOnly) override;
 
+    void Clear() override;
+    void Play() override;
+
     bool Poll(cPoller &Poller, int TimeoutMs) override;
     bool Flush(int TimeoutMs) override;
 

@@ -192,7 +192,7 @@ void cWebBridgeServer::Action() {
                     char denStr[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &(sa.sin_addr), denStr, INET_ADDRSTRLEN);
 
-                    error("Connection denied from %s", denStr);
+                    logerror("Connection denied from %s", denStr);
                     ws->close();
                 }
             },

@@ -1,7 +1,7 @@
-#include <iomanip>
 #include <filesystem>
-#include <vdr/device.h>
 #include <vdr/plugin.h>
+#include <vdr/tools.h>
+#include <mutex>
 #include "log.h"
 #include "ffmpeghls.h"
 
@@ -10,24 +10,20 @@ const char *STREAM_DIR = "/tmp/vdr-live-tv-stream";
 cFFmpegHLS::cFFmpegHLS(bool isReplay, cString channel, cString recName, cString recFileName) {
     debug1("%s: Channel %s, RecName %s, RecFileName %s", __PRETTY_FUNCTION__, *channel, *recName, *recFileName);
 
-    // create at first the tmp directory if it not exists
-    if (!std::filesystem::is_directory(STREAM_DIR) || !std::filesystem::exists(STREAM_DIR)) {
-        std::filesystem::create_directory(STREAM_DIR);
+    // delete directory if it exists
+    if (!RemoveFileOrDir(STREAM_DIR, false)) {
+        logerror("Unable to delete directory %s\n", STREAM_DIR);
+    } else {
+        debug1("Directory %s removed.", STREAM_DIR);
     }
 
-    for(auto& dir_element : std::filesystem::directory_iterator(STREAM_DIR)) {
-        std::filesystem::remove_all(dir_element.path());
-    }
+    // create  the tmp directory
+    std::filesystem::create_directory(STREAM_DIR);
 
-    cString cmdLineScript;
-    cString transcodeCmdLine;
+    std::string cmdLineScript;
+    std::string transcodeCmdLine;
 
     std::vector<std::string> callStr;
-
-    // printf("Channel: %s\n", *channel);
-    // printf("RecName: %s\n", *recName);
-    // printf("RecFileName: %s\n", *recFileName);
-    // printf("IsReplay: %s\n", isReplay ? "Ja" : "Nein");
 
     if (isReplay) {
         callStr.emplace_back(std::string(cPlugin::ConfigDirectory(PLUGIN_NAME_I18N)) + "/stream_recording.sh");
@@ -38,72 +34,69 @@ cFFmpegHLS::cFFmpegHLS(bool isReplay, cString channel, cString recName, cString 
         callStr.emplace_back(*channel);
     }
 
-    // call the script and read the constructed commandline
-    auto cmdLineProcess = new TinyProcessLib::Process(callStr, "",
-                                                [&transcodeCmdLine](const char *bytes, size_t n) {
-                                                  std::string msg = std::string(bytes, n);
-                                                  transcodeCmdLine = transcodeCmdLine.Append(msg.c_str());
-                                                },
+    transcodeCmdLine = readCommandLine(callStr);
 
-                                                [](const char *bytes, size_t n) {
-                                                  std::string msg = std::string(bytes, n);
-                                                  error("Error: %s\n", msg.c_str());
-                                                },
-
-                                                true
-    );
-
-    cmdLineProcess->get_exit_status();
-
-    debug1("Transcoder command line: %s", *transcodeCmdLine);
-
-    if (strlen(*transcodeCmdLine) == 0) {
-        error("Transcode commandline is empty");
+    if (transcodeCmdLine.empty()) {
+        logerror("Transcode commandline is empty");
         return;
     }
 
-    ffmpegProcess = new TinyProcessLib::Process(*transcodeCmdLine, STREAM_DIR, nullptr, nullptr, true);
+    std::vector cmd = {std::string("cd ") + STREAM_DIR + "&&" + transcodeCmdLine};
+    ffmpegProcess = new cProcess([this](auto && PH1) { captureStdout(std::forward<decltype(PH1)>(PH1)); },
+                                 [this](auto && PH1) { captureStderr(std::forward<decltype(PH1)>(PH1)); },
+                                 [this](auto && PH1) { captureError(std::forward<decltype(PH1)>(PH1)); });
 
-    int exitStatus;
-
-    if (ffmpegProcess->try_get_exit_status(exitStatus)) {
-        error("ffmpeg error_code: %d\n", exitStatus);
-    }
+    ffmpegProcess->start(cmd);
 }
 
 cFFmpegHLS::~cFFmpegHLS() {
     debug1("%s", __PRETTY_FUNCTION__);
 
-    if (ffmpegProcess!=nullptr) {
-        ffmpegProcess->close_stdin();
-        ffmpegProcess->kill(true);
-        ffmpegProcess->get_exit_status();
-
+    if (ffmpegProcess != nullptr) {
+        ffmpegProcess->stop();
+        delete ffmpegProcess;
         ffmpegProcess = nullptr;
     }
 
-    for(auto& dir_element : std::filesystem::directory_iterator(STREAM_DIR)) {
-        std::filesystem::remove_all(dir_element.path());
+    // delete directory if it exists
+    if (!RemoveFileOrDir(STREAM_DIR, false)) {
+        logerror("Unable to delete directory %s\n", STREAM_DIR);
+    } else {
+        debug1("Directory %s removed.", STREAM_DIR);
     }
 }
 
 void cFFmpegHLS::Receive(const uchar *Data, int Length) {
     debug4("%s", __PRETTY_FUNCTION__);
 
-    int exitStatus;
+    if (ffmpegProcess != nullptr && ffmpegProcess->isRunning()) {
+        ffmpegProcess->writeToStdin(reinterpret_cast<const char *>(Data), Length);
+    } else {
+        debug9("%s: Receive without an ffmpegProcess", __PRETTY_FUNCTION__);
+    }
+}
 
-    if (ffmpegProcess == nullptr) {
-        return;
+std::string cFFmpegHLS::readCommandLine(std::vector<std::string> callStr) {
+    cSimpleProcess p;
+    p.process(callStr);
+
+    std::string error = p.getErrorOutput();
+    if (!error.empty()) {
+        logerror("%s\n", error.c_str());
+        return "";
     }
 
-    if (ffmpegProcess->try_get_exit_status(exitStatus)) {
-        // process stopped/finished/crashed
-        // printf("ffmpeg error_code: %d\n", exitStatus);
-        return;
-    }
+    return p.getStdoutOutput();
+}
 
-    ssize_t writtenBytes = ffmpegProcess->writeBytes((const char *) Data, Length);
-    if (writtenBytes == -1) {
-        debug1("Cannot write %d", Length);
-    }
+void cFFmpegHLS::captureStdout(const std::string& out) {
+    // TODO: was soll ich hiermit machen?
+}
+
+void cFFmpegHLS::captureStderr(const std::string& err) {
+    // TODO: was soll ich hiermit machen?
+}
+
+void cFFmpegHLS::captureError(const std::string& error) {
+    // TODO: was soll ich hiermit machen?
 }

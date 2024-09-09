@@ -17,6 +17,6 @@ void cWebBridgeConfig::SetConfigDirectory(const char *directory) {
     debug1("%s (%s)", __PRETTY_FUNCTION__, directory);
 
     if (!realpath(directory, configDirectory)) {
-        error("Cannot canonicalize configuration directory");
+        logerror("Cannot canonicalize configuration directory");
     }
 }

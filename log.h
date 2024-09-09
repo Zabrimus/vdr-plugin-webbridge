@@ -9,7 +9,7 @@
 
 #include "config.h"
 
-#define error(x...)   esyslog("[WebBridge] ERROR: " x)
+#define logerror(x...)   esyslog("[WebBridge] ERROR: " x)
 #define info(x...)    isyslog("[WebBridge]: " x)
 // 0x0001: Generic call stack
 #define debug1(x...)  void( WebBridgeConfig.IsTraceMode(cWebBridgeConfig::eTraceModeDebug1)  ? dsyslog("[WebBridge][1]: " x)  : void() )
@@ -29,3 +29,5 @@
 #define debug8(x...)  void( WebBridgeConfig.IsTraceMode(cWebBridgeConfig::eTraceModeDebug8)  ? dsyslog("[WebBridge][8]: " x)  : void() )
 // 0x0100: TBD
 #define debug9(x...)  void( WebBridgeConfig.IsTraceMode(cWebBridgeConfig::eTraceModeDebug9)  ? dsyslog("[WebBridge][9]: " x)  : void() )
+
+void printBacktrace();
