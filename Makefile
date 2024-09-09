@@ -71,7 +71,7 @@ OBJS = $(PLUGIN).o config.o server.o  $(U_LIBSOCKET_OBJS_C)
 
 ### The main target:
 
-all: uSockets $(SOFILE) i18n
+all: $(SOFILE) i18n
 
 ### Implicit rules:
 
@@ -123,7 +123,7 @@ install-i18n: $(I18Nmsgs)
 
 ### Targets:
 
-$(SOFILE): $(OBJS)
+$(SOFILE): $(OBJS) uSockets
 	@echo LD $@
 	$(Q)$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared $(OBJS) $(U_SOCKETS_LIB) -o $@
 
