@@ -26,9 +26,6 @@ U_WEBSOCKETS_INCLUDE=thirdparty/uWebSockets-$(U_WEBSOCKETS_VERSION)/src
 U_LIBSOCKET_INCLUDE=thirdparty/libsocket-$(U_LIBSOCKET_VERSION)/headers
 U_LIBSOCKET_OBJS_C=thirdparty/libsocket-$(U_LIBSOCKET_VERSION)/C/unix/libunixsocket.o thirdparty/libsocket-$(U_LIBSOCKET_VERSION)/C/inet/libinetsocket.o
 
-U_TINY_PROCESS_LIBRARY_INCLUDE=thirdparty/tiny-process-library
-U_TINY_PROCESS_LIBRARY_OBJ=thirdparty/tiny-process-library/process_unix.o thirdparty/tiny-process-library/process.o
-
 ### The directory environment:
 
 # Use package data if installed...otherwise assume we're under the VDR source directory:
@@ -68,17 +65,17 @@ SOFILE = libvdr-$(PLUGIN).so
 
 ### Includes and Defines (add further entries here):
 
-INCLUDES += -I$(U_WEBSOCKETS_INCLUDE) -I$(U_SOCKETS_INCLUDE) -I$(U_LIBSOCKET_INCLUDE) -I $(U_TINY_PROCESS_LIBRARY_INCLUDE)
+INCLUDES += -I$(U_WEBSOCKETS_INCLUDE) -I$(U_SOCKETS_INCLUDE) -I$(U_LIBSOCKET_INCLUDE)
 
 DEFINES += -DPLUGIN_NAME_I18N='"$(PLUGIN)"'
 
 ### The object files (add further files here):
 
-OBJS = $(PLUGIN).o config.o server.o fpng.o webdevice.o webosd.o webremote.o webstatus.o ffmpeghls.o $(U_LIBSOCKET_OBJS_C) $(U_TINY_PROCESS_LIBRARY_OBJ)
+OBJS = $(PLUGIN).o config.o server.o fpng.o webdevice.o webosd.o webremote.o webstatus.o ffmpeghls.o process.o log.o $(U_LIBSOCKET_OBJS_C)
 
 ### The main target:
 
-all: $(SOFILE) i18n
+all: uSockets $(SOFILE) i18n
 
 ### Implicit rules:
 
@@ -130,7 +127,7 @@ install-i18n: $(I18Nmsgs)
 
 ### Targets:
 
-$(SOFILE): $(OBJS) uSockets
+$(SOFILE): $(OBJS)
 	@echo LD $@
 	$(Q)$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared $(OBJS) $(U_SOCKETS_LIB) -o $@
 
