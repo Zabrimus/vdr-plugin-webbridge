@@ -243,7 +243,6 @@ void cWebBridgeServer::Action() {
             },
 
             .drain = [](auto *) {
-              printf("Drain\n");
             },
 
             .close = [this](auto *, int, std::string_view) {
