@@ -73,9 +73,31 @@ struct AsyncStreamer {
 
     template<bool SSL>
     void streamFile(uWS::HttpResponse<SSL> *res, std::string_view url) {
-        // NOTE: This is very unsafe, people can inject things like ../../bla in the URL and completely bypass the root folder restriction.
-        // Make sure to harden this code if it's intended to use it in anything internet facing.
         std::string nview = root + "/" + std::string{url.substr(1)};
+
+        auto path = std::filesystem::path(nview);
+        if (!std::filesystem::exists(path)) {
+            info("Reject request, does not exists: %s (not in %s)", path.c_str(), root.c_str());
+
+            res->writeStatus("403 Forbidden");
+            res->writeHeader("Content-Type", "text/html; charset=utf-8");
+            res->end("<b>403 Forbidden</b>");
+
+            return;
+        }
+
+        auto canPath = std::filesystem::canonical(path).string();
+        if (!startswith(canPath.c_str(), root.c_str())) {
+            info("Reject request: %s (not in %s)", path.c_str(), root.c_str());
+
+            // path outside the desired directory -> reject
+            res->writeStatus("403 Forbidden");
+            res->writeHeader("Content-Type", "text/html; charset=utf-8");
+            res->end("<b>403 Forbidden</b>");
+
+            return;
+        }
+
         FILE *f = fopen(nview.c_str(), "rb");
 
         stream(res, f);
@@ -96,6 +118,19 @@ struct AsyncStreamer {
         }
 
         if (std::filesystem::exists(desiredFile)) {
+            auto path = std::filesystem::path(nview);
+            auto canPath = std::filesystem::canonical(path).string();
+            if (!startswith(canPath.c_str(), STREAM_DIR)) {
+                info("Reject request: %s (not in %s)", path.c_str(), root.c_str());
+
+                // path outside the desired directory -> reject
+                res->writeStatus("403 Forbidden");
+                res->writeHeader("Content-Type", "text/html; charset=utf-8");
+                res->end("<b>403 Forbidden</b>");
+
+                return;
+            }
+
             FILE *f = fopen(nview.c_str(), "rb");
             stream(res, f);
         } else {
