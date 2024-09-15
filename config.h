@@ -17,6 +17,8 @@ private:
     unsigned int port;
     cString host = "";
     char configDirectory[PATH_MAX];
+    bool disableSvdrp;
+    bool disableOsd;
 
 public:
     enum eTraceMode {
@@ -39,13 +41,18 @@ public:
     bool IsTraceMode(eTraceMode modeP) const { return (traceModeM & modeP); };
     void SetTraceMode(unsigned int modeP) { traceModeM = (modeP & eTraceModeMask); };
     void SetConfigDirectory(const char *directory);
+    void DisableOsd() { disableOsd = true; };
+    void DisableSvdrp() { disableSvdrp = true; };
 
     void SetWebsocketPort(unsigned int portP) { port = portP; };
     unsigned int GetWebsocketPort() const { return port; };
     void SetWebsocketHost(cString hostP) { host = std::move(hostP); };
     cString GetWebsocketHost() const { return host; };
+    bool IsSvdrpDisabled() { return disableSvdrp; };
+    bool IsOsdDisabled() { return disableOsd; };
 
     const char *GetConfigDirectory() const { return configDirectory; };
+
 };
 
 extern cWebBridgeConfig WebBridgeConfig;

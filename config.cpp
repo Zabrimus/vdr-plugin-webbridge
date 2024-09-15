@@ -10,7 +10,7 @@
 
 cWebBridgeConfig WebBridgeConfig;
 
-cWebBridgeConfig::cWebBridgeConfig() : traceModeM(eTraceModeNormal), port(0) {
+cWebBridgeConfig::cWebBridgeConfig() : traceModeM(eTraceModeNormal), port(0), disableSvdrp(false), disableOsd(false) {
 }
 
 void cWebBridgeConfig::SetConfigDirectory(const char *directory) {

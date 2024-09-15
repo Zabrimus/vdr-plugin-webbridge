@@ -45,7 +45,9 @@ const char *cPluginWebbridge::CommandLineHelp() {
     // Return a string that describes all known command line options.
     return "  -h <host>, --host=hostname           hostname/ip of the VDR\n"
            "  -p <num>,  --port=<number>           port of the internal websocket\n"
-           "  -t <mode>, --trace=<mode>            set the tracing mode\n";
+           "  -t <mode>, --trace=<mode>            set the tracing mode\n"
+           "  -s       , --disable-svdrp           disables SVDRP\n"
+           "  -o       , --disable-osd             disables OSD\n";
 }
 
 bool cPluginWebbridge::ProcessArgs(int argc, char *argv[]) {
@@ -56,11 +58,13 @@ bool cPluginWebbridge::ProcessArgs(int argc, char *argv[]) {
         {"host", required_argument, nullptr, 'h'},
         {"port", required_argument, nullptr, 'p'},
         {"trace", required_argument, nullptr, 't'},
+        {"disable-svdrp", no_argument, nullptr, 's'},
+        {"disable-osd", no_argument, nullptr, 'o'},
         {nullptr, no_argument, nullptr, 0}
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "p:t:h:", long_options, nullptr))!=-1) {
+    while ((c = getopt_long(argc, argv, "p:t:h:so", long_options, nullptr))!=-1) {
         switch (c) {
         case 't':
             WebBridgeConfig.SetTraceMode(strtol(optarg, nullptr, 0));
@@ -72,6 +76,14 @@ bool cPluginWebbridge::ProcessArgs(int argc, char *argv[]) {
 
         case 'h':
             WebBridgeConfig.SetWebsocketHost(optarg);
+            break;
+
+        case 'o':
+            WebBridgeConfig.DisableOsd();
+            break;
+
+        case 's':
+            WebBridgeConfig.DisableSvdrp();
             break;
 
         default:

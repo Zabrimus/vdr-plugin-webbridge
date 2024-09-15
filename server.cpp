@@ -202,8 +202,10 @@ cWebBridgeServer::~cWebBridgeServer() {
 }
 
 void cWebBridgeServer::Action() {
-    uWS::App app = uWS::App()
-        .ws<PerSocketData>("/svdrp", {
+    uWS::App app = uWS::App();
+
+    if (!WebBridgeConfig.IsSvdrpDisabled()) {
+        app.ws<PerSocketData>("/svdrp", {
             .compression = uWS::SHARED_COMPRESSOR,
             .maxPayloadLength = 1*1024*1024,
             .idleTimeout = 12,
@@ -219,17 +221,17 @@ void cWebBridgeServer::Action() {
             },
 
             .open = [this](uWS::WebSocket<false, true, PerSocketData> *ws) {
-                auto ipStr = addressAsText(ws->getRemoteAddress().substr(12));
-                struct sockaddr_in sa;
-                inet_pton(AF_INET, std::string(ipStr).c_str(), &(sa.sin_addr));
+              auto ipStr = addressAsText(ws->getRemoteAddress().substr(12));
+              struct sockaddr_in sa;
+              inet_pton(AF_INET, std::string(ipStr).c_str(), &(sa.sin_addr));
 
-                if (!SVDRPhosts.Acceptable(sa.sin_addr.s_addr)) {
-                    char denStr[INET_ADDRSTRLEN];
-                    inet_ntop(AF_INET, &(sa.sin_addr), denStr, INET_ADDRSTRLEN);
+              if (!SVDRPhosts.Acceptable(sa.sin_addr.s_addr)) {
+                  char denStr[INET_ADDRSTRLEN];
+                  inet_ntop(AF_INET, &(sa.sin_addr), denStr, INET_ADDRSTRLEN);
 
-                    logerror("Connection denied from %s", denStr);
-                    ws->close();
-                }
+                  logerror("Connection denied from %s", denStr);
+                  ws->close();
+              }
             },
 
             .message = [this](auto *ws, std::string_view message, uWS::OpCode opCode) {
@@ -283,13 +285,15 @@ void cWebBridgeServer::Action() {
             .close = [this](auto *, int, std::string_view) {
               svdrpSocket = nullptr;
             }
-        })
+        });
+    };
 
-        .ws<PerSocketData>("/tv", {
+    if (!WebBridgeConfig.IsOsdDisabled()) {
+        app.ws<PerSocketData>("/tv", {
             .compression = uWS::SHARED_COMPRESSOR,
-            .maxPayloadLength = 1 * 1024 * 1024,
+            .maxPayloadLength = 1*1024*1024,
             .idleTimeout = 12,
-            .maxBackpressure = 1 * 1024 * 1024,
+            .maxBackpressure = 1*1024*1024,
             .upgrade = [](auto *res, auto *req, auto *context) {
               res->template upgrade<PerSocketData>({
                                                        /* We initialize PerSocketData struct here */
@@ -310,7 +314,7 @@ void cWebBridgeServer::Action() {
               debug5("Got message: %s:%ld", std::string(message).c_str(), message.length());
 
               long unsigned int position;
-              if ((position = message.find(':')) != std::string::npos) {
+              if ((position = message.find(':'))!=std::string::npos) {
                   auto token = message.substr(0, position - 1);
                   auto data = message.substr(position + 1, message.length());
 
@@ -329,48 +333,56 @@ void cWebBridgeServer::Action() {
               osdSocket = nullptr;
               webDevice->Activate(false);
             }
-        })
+        });
+    };
 
-        .get("/", [this](auto *res, auto *req) {
-          // send index.html
-          res->writeHeader("Content-Type", "text/html; charset=utf-8");
-          streamer.streamFile(res, "/index.html");
-        })
+    if (!WebBridgeConfig.IsOsdDisabled()) {
+        app.get("/", [this](auto *res, auto *req) {
+             // send index.html
+             res->writeHeader("Content-Type", "text/html; charset=utf-8");
+             streamer.streamFile(res, "/index.html");
+           })
 
-        .get("/vdrconfig", [this](auto *res, auto *req) {
-          // send parameter
-          res->writeStatus(uWS::HTTP_200_OK);
-          res->writeHeader("Content-Type", "application/javascript");
-          res->write("vdr_host=\""); res->write(*WebBridgeConfig.GetWebsocketHost()); res->write("\";\n");
-          res->write("vdr_port=\""); res->write(std::to_string(WebBridgeConfig.GetWebsocketPort()));  res->write("\";\n");
-          res->end("");
-          WebBridgeConfig.GetWebsocketPort();
-        })
+           .get("/vdrconfig", [this](auto *res, auto *req) {
+             // send parameter
+             res->writeStatus(uWS::HTTP_200_OK);
+             res->writeHeader("Content-Type", "application/javascript");
+             res->write("vdr_host=\"");
+             res->write(*WebBridgeConfig.GetWebsocketHost());
+             res->write("\";\n");
+             res->write("vdr_port=\"");
+             res->write(std::to_string(WebBridgeConfig.GetWebsocketPort()));
+             res->write("\";\n");
+             res->end("");
+             WebBridgeConfig.GetWebsocketPort();
+           })
 
-        .get("/video.js", [](auto *res, auto *req) {
-          res->writeHeader("Content-Type", "application/javascript");
-          streamer.streamFile(res, "/video.min.js");
-        })
+           .get("/video.js", [](auto *res, auto *req) {
+             res->writeHeader("Content-Type", "application/javascript");
+             streamer.streamFile(res, "/video.min.js");
+           })
 
-        .get("/video-js.css", [](auto *res, auto *req) {
-          res->writeHeader("Content-Type", "text/css");
-          streamer.streamFile(res, "/video-js.css");
-        })
+           .get("/video-js.css", [](auto *res, auto *req) {
+             res->writeHeader("Content-Type", "text/css");
+             streamer.streamFile(res, "/video-js.css");
+           })
 
-        .get("/stream/*", [](auto *res, auto *req) {
-          // send video stream / m3u8
-          streamer.streamVideo(res, req->getUrl());
-        })
+           .get("/stream/*", [](auto *res, auto *req) {
+             // send video stream / m3u8
+             streamer.streamVideo(res, req->getUrl());
+           })
 
-        .get("/*", [](auto *res, auto *req) {
-          debug1("File %s is not configured\n", std::string(req->getUrl()).c_str());
+           .get("/*", [](auto *res, auto *req) {
+             debug1("File %s is not configured\n", std::string(req->getUrl()).c_str());
 
-          res->writeStatus("404 Not Found");
-          res->writeHeader("Content-Type", "text/html; charset=utf-8");
-          res->end("<b>404 Not Found</b>");
-        })
+             res->writeStatus("404 Not Found");
+             res->writeHeader("Content-Type", "text/html; charset=utf-8");
+             res->end("<b>404 Not Found</b>");
+           });
+    };
 
-        .listen(port, [this](auto *socket) {
+    if (!WebBridgeConfig.IsOsdDisabled() || !WebBridgeConfig.IsSvdrpDisabled()) {
+        app.listen(port, [this](auto *socket) {
           if (socket) {
               info("Start WebBridgeServer on port %d", port);
               printf("Start WebBridgeServer on port %d", port);
@@ -378,12 +390,13 @@ void cWebBridgeServer::Action() {
           }
         });
 
-    globalAppLoop = uWS::Loop::get();
-    globalApp = &app;
+        globalAppLoop = uWS::Loop::get();
+        globalApp = &app;
 
-    app.run();
+        app.run();
 
-    globalApp = nullptr;
+        globalApp = nullptr;
+    }
 }
 
 void cWebBridgeServer::sendError(uWS::WebSocket<false, true, PerSocketData> *ws, const uWS::OpCode &opCode, int ret) const {
