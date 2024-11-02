@@ -127,7 +127,7 @@ install-i18n: $(I18Nmsgs)
 
 ### Targets:
 
-$(SOFILE): $(OBJS)
+$(SOFILE): $(OBJS) uSockets
 	@echo LD $@
 	$(Q)$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared $(OBJS) $(U_SOCKETS_LIB) -o $@
 
